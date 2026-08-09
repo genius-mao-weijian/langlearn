@@ -2,71 +2,109 @@
  * 进度追踪模块路由（progress）
  *
  * 限界上下文：Progress & Achievement
- * 职责：学习进度概览、课程详细进度查询、进度记录
+ * 职责：学习进度概览、课程详细进度查询
  *
  * 【数据更新机制】
- * 进度数据不由用户直接写入，而是由 learning 模块在练习完成时
- * 发布 EXERCISE_COMPLETED 事件，progress 模块订阅该事件后异步更新进度。
- * 这种事件驱动的解耦设计保证了 learning 模块无需感知 progress 的存在，
- * 二者仅通过事件总线协作。
+ * 进度数据不由用户直接通过 HTTP 写入，而是由 learning 模块在练习完成时
+ * 发布 EXERCISE_COMPLETED 事件，本模块订阅该事件后异步更新进度。
+ * 因此本模块仅暴露 GET 查询接口，不提供 POST 写入接口（事件驱动解耦）。
+ *
+ * 统一响应格式：{ code: 0, message: '成功', data: T }
  */
-import { Router, Request, Response, RequestHandler } from 'express';
-import type { AuthenticatedRequest } from '../shared/types.js';
+import { Router, Response } from 'express';
+import { authMiddleware } from '../shared/authMiddleware.js';
+import { eventBus, EventType } from '../shared/eventBus.js';
+import type { AuthenticatedRequest, ApiResponse, ExerciseCompletedPayload } from '../shared/types.js';
+import {
+  getProgressOverview,
+  getCourseProgress,
+  recordProgress,
+} from './service.js';
 
 const router = Router();
 
-/**
- * JWT 鉴权中间件（占位）
- * 与 identity 模块共用同一套 JWT 校验逻辑，后续将抽取到 shared 层统一实现。
- */
-const authMiddleware: RequestHandler = (_req, _res, next) => {
-  // TODO: 实现 JWT 校验逻辑，校验通过后将 userId 挂载到 req 上
-  next();
-};
+// ===== 事件订阅：监听练习完成事件，异步更新学习进度 =====
+// 在模块加载时注册订阅，app.ts 导入本模块即触发注册。
+// eventBus 通过 setImmediate 异步执行处理器，且内部已 try/catch，
+// 此处再包一层 Promise.catch 防止 recordProgress 的异步拒绝逃逸为 unhandledRejection。
+eventBus.on(EventType.EXERCISE_COMPLETED, (payload) => {
+  recordProgress(payload as ExerciseCompletedPayload).catch((err) => {
+    console.error('[progress] recordProgress 处理失败：', err);
+  });
+});
 
 /**
  * GET / - 获取当前用户学习进度概览
  * 需鉴权
- * 返回：各语言 / 等级的学习时长、完成率、连续打卡天数等
+ * 返回该用户所有已学习课程的进度列表（含完成率、正确数等）。
  */
-router.get('/', authMiddleware, (req: Request, res: Response) => {
-  const userId = (req as AuthenticatedRequest).userId ?? null;
-  res.status(501).json({
-    code: 501,
-    message: '获取学习进度概览接口尚未实现（P0 占位）',
-    data: { userId },
-  });
+router.get('/', authMiddleware, async (req, res: Response) => {
+  try {
+    const userId = (req as AuthenticatedRequest).userId;
+    if (!userId) {
+      res.status(401).json({
+        code: 401,
+        message: '未登录',
+        data: null,
+      } satisfies ApiResponse);
+      return;
+    }
+
+    const overview = await getProgressOverview(userId);
+
+    res.json({
+      code: 0,
+      message: '成功',
+      data: overview,
+    } satisfies ApiResponse);
+  } catch (err) {
+    console.error('[progress] 获取进度概览失败：', err);
+    res.status(500).json({
+      code: 500,
+      message: '服务器内部错误',
+      data: null,
+    } satisfies ApiResponse);
+  }
 });
 
 /**
  * GET /detail/:courseId - 获取某课程的详细进度
  * 需鉴权
  * 路径参数：courseId - 课程 ID
- * 返回：该课程下各课时的完成状态、正确率、最近学习时间
  */
-router.get('/detail/:courseId', authMiddleware, (req: Request, res: Response) => {
-  const userId = (req as AuthenticatedRequest).userId ?? null;
-  res.status(501).json({
-    code: 501,
-    message: '获取课程详细进度接口尚未实现（P0 占位）',
-    data: { userId, courseId: req.params.courseId },
-  });
-});
+router.get('/detail/:courseId', authMiddleware, async (req, res: Response) => {
+  try {
+    const userId = (req as AuthenticatedRequest).userId;
+    if (!userId) {
+      res.status(401).json({
+        code: 401,
+        message: '未登录',
+        data: null,
+      } satisfies ApiResponse);
+      return;
+    }
 
-/**
- * POST / - 记录学习进度（内部接口）
- * 该接口主要由事件总线触发的处理器调用，非面向终端用户。
- * 当 learning 模块发出 EXERCISE_COMPLETED 事件时，
- * progress 模块的事件处理器会调用此逻辑更新进度。
- *
- * 后续实现逻辑：写入 / 更新进度表，必要时发布 PROGRESS_UPDATED 事件
- */
-router.post('/', (req: Request, res: Response) => {
-  res.status(501).json({
-    code: 501,
-    message: '记录学习进度接口尚未实现（P0 占位）',
-    data: { body: req.body },
-  });
+    const detail = await getCourseProgress(userId, req.params.courseId);
+
+    // 无进度记录 -> 404（用户尚未学习该课程）
+    if (!detail) {
+      res.status(404).json({
+        code: 404,
+        message: '暂无该课程的学习进度',
+        data: null,
+      } satisfies ApiResponse);
+      return;
+    }
+
+    res.json({ code: 0, message: '成功', data: detail } satisfies ApiResponse);
+  } catch (err) {
+    console.error('[progress] 获取课程详细进度失败：', err);
+    res.status(500).json({
+      code: 500,
+      message: '服务器内部错误',
+      data: null,
+    } satisfies ApiResponse);
+  }
 });
 
 export default router;

@@ -52,6 +52,10 @@ app.use('/api/courses', courseRoutes);     // 分级课程模块：课程 / 课�
 app.use('/api/learning', learningRoutes);  // 互动学习模块：练习 / 单词 / 听力
 app.use('/api/progress', progressRoutes);  // 进度追踪模块：学习进度
 
+// 注册事件订阅：progress 模块订阅 EXERCISE_COMPLETED 事件
+// import 该模块会触发 routes.ts 中的 eventBus.on() 调用
+import './modules/progress/routes.js';
+
 // ===== 启动 HTTP 服务 =====
 app.listen(env.PORT, () => {
   console.log(`[langlearn] 后端服务已启动，监听端口 ${env.PORT}`);

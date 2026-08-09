@@ -78,3 +78,101 @@ export interface PaginatedResult<T> {
   /** 每页条数 */
   pageSize: number;
 }
+
+// ===== 各模块 DTO 类型 =====
+
+/** 用户信息（不含密码） */
+export interface UserDTO {
+  id: string;
+  email: string;
+  nickname: string;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+/** 登录/注册响应 */
+export interface AuthResponseDTO {
+  user: UserDTO;
+  accessToken: string;
+  refreshToken: string;
+}
+
+/** 课程信息 */
+export interface CourseDTO {
+  id: string;
+  title: string;
+  description: string | null;
+  language: string;
+  level: string;
+  coverImageUrl: string | null;
+  sortOrder: number;
+}
+
+/** 课时信息 */
+export interface LessonDTO {
+  id: string;
+  courseId: string;
+  title: string;
+  description: string | null;
+  sortOrder: number;
+}
+
+/** 练习信息 */
+export interface ExerciseDTO {
+  id: string;
+  lessonId: string;
+  type: string;
+  question: string;
+  options: string[];
+  metadata: Record<string, unknown>;
+  sortOrder: number;
+}
+
+/** 单词信息 */
+export interface VocabularyDTO {
+  id: string;
+  word: string;
+  phonetic: string | null;
+  partOfSpeech: string | null;
+  definition: string;
+  exampleSentence: string | null;
+  exampleTranslation: string | null;
+  level: string;
+}
+
+/** 听力素材信息 */
+export interface ListeningMaterialDTO {
+  id: string;
+  title: string;
+  audioUrl: string;
+  durationSeconds: number;
+  transcript: string | null;
+  level: string;
+}
+
+/** 练习提交结果 */
+export interface ExerciseResultDTO {
+  exerciseId: string;
+  isCorrect: boolean;
+  correctAnswer: string;
+}
+
+/** 进度概览 */
+export interface ProgressOverviewDTO {
+  courseId: string;
+  courseTitle: string;
+  totalExercises: number;
+  completedExercises: number;
+  correctExercises: number;
+  completionRate: number;
+  lastStudiedAt: string | null;
+}
+
+/** EXERCISE_COMPLETED 事件载荷 */
+export interface ExerciseCompletedPayload {
+  userId: string;
+  exerciseId: string;
+  lessonId: string;
+  courseId: string;
+  isCorrect: boolean;
+}
