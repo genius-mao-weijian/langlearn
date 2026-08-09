@@ -8,13 +8,12 @@ import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import './index.css';
 
-// 创建 React 根并渲染应用
-// StrictMode 会在开发环境下额外执行一次渲染以检测潜在副作用，生产构建自动失效
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <BrowserRouter>
       <App />
     </BrowserRouter>
-  </StrictMode>
+  </StrictMode>,
 );

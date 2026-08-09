@@ -23,6 +23,7 @@ import {
   getListeningList,
   getExerciseById,
   submitExercise,
+  toExerciseDTO,
 } from './service.js';
 
 const router = Router();
@@ -118,8 +119,7 @@ router.get('/:exerciseId', authMiddleware, async (req, res: Response) => {
     }
 
     // 剔除 correctAnswer 与 courseId，仅返回前端展示所需字段
-    const { correctAnswer: _correctAnswer, courseId: _courseId, ...exerciseDTO } =
-      exercise;
+    const exerciseDTO = toExerciseDTO(exercise);
 
     res.json({
       code: 0,

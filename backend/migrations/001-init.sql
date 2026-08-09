@@ -1,6 +1,8 @@
 -- ========================================
--- 多语种学习平台 P0 建表脚本
+-- 多语种学习平台 P0 建表脚本（v2：适配前端落地化字段）
 -- ========================================
+-- 本脚本幂等：CREATE IF NOT EXISTS，新增 ALTER ADD COLUMN IF NOT EXISTS。
+-- 执行顺序：先建表 → 再加列 → 再加索引。
 
 -- 用户表（Identity 模块）
 CREATE TABLE IF NOT EXISTS users (
@@ -9,24 +11,30 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   nickname VARCHAR(100) NOT NULL,
   avatar_url VARCHAR(500),
+  native_language VARCHAR(10),
+  target_language VARCHAR(10),
+  target_level VARCHAR(10),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS  native_language VARCHAR(10);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS  target_language VARCHAR(10);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS  target_level    VARCHAR(10);
 
 -- 课程表（Course 模块）
 CREATE TABLE IF NOT EXISTS courses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title VARCHAR(200) NOT NULL,
   description TEXT,
-  language VARCHAR(10) NOT NULL,  -- en, ja, ko
-  level VARCHAR(10) NOT NULL,     -- A1, A2, B1, B2, C1, C2
+  language VARCHAR(10) NOT NULL,
+  level VARCHAR(10) NOT NULL,
   cover_image_url VARCHAR(500),
   sort_order INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 课时表（Course 模块）
+-- 课时表
 CREATE TABLE IF NOT EXISTS lessons (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -41,18 +49,16 @@ CREATE TABLE IF NOT EXISTS lessons (
 CREATE TABLE IF NOT EXISTS exercises (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
-  type VARCHAR(20) NOT NULL,  -- vocabulary, listening
+  type VARCHAR(20) NOT NULL,
   question TEXT NOT NULL,
-  -- 选项用 JSONB 存储，格式: ["选项A", "选项B", "选项C", "选项D"]
   options JSONB NOT NULL,
   correct_answer VARCHAR(500) NOT NULL,
-  -- 附加数据用 JSONB 存储（如音频 URL、音标等）
   metadata JSONB DEFAULT '{}'::jsonb,
   sort_order INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 单词库（Learning 模块 - 单词专项）
+-- 单词库
 CREATE TABLE IF NOT EXISTS vocabulary (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   word VARCHAR(200) NOT NULL,
@@ -61,34 +67,41 @@ CREATE TABLE IF NOT EXISTS vocabulary (
   definition TEXT NOT NULL,
   example_sentence TEXT,
   example_translation TEXT,
-  level VARCHAR(10) NOT NULL,  -- A1, A2, B1...
-  language VARCHAR(10) NOT NULL DEFAULT 'en',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 听力素材库（Learning 模块 - 听力专项）
-CREATE TABLE IF NOT EXISTS listening_materials (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title VARCHAR(200) NOT NULL,
-  audio_url VARCHAR(500) NOT NULL,
-  duration_seconds INT NOT NULL,
-  transcript TEXT,
   level VARCHAR(10) NOT NULL,
   language VARCHAR(10) NOT NULL DEFAULT 'en',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 练习记录表（Learning 模块 - 答题记录）
+-- 听力素材库
+CREATE TABLE IF NOT EXISTS listening_materials (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(200) NOT NULL,
+  audio_url VARCHAR(500) NOT NULL,
+  duration_seconds INT NOT NULL DEFAULT 0,
+  transcript TEXT,
+  level VARCHAR(10) NOT NULL,
+  language VARCHAR(10) NOT NULL DEFAULT 'en',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE listening_materials ALTER COLUMN duration_seconds SET DEFAULT 0;
+
+-- 练习记录表（新增 xp_earned 便于 Progress 聚合）
 CREATE TABLE IF NOT EXISTS exercise_attempts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   exercise_id UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
   user_answer VARCHAR(500) NOT NULL,
   is_correct BOOLEAN NOT NULL,
+  xp_earned INT NOT NULL DEFAULT 0,
+  score INT NOT NULL DEFAULT 0,
+  duration_seconds INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE exercise_attempts ADD COLUMN IF NOT EXISTS xp_earned INT NOT NULL DEFAULT 0;
+ALTER TABLE exercise_attempts ADD COLUMN IF NOT EXISTS score INT NOT NULL DEFAULT 0;
+ALTER TABLE exercise_attempts ADD COLUMN IF NOT EXISTS duration_seconds INT NOT NULL DEFAULT 0;
 
--- 学习进度表（Progress 模块）
+-- 学习进度表（P0 按 user/course 统计）
 CREATE TABLE IF NOT EXISTS progress_records (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -103,6 +116,16 @@ CREATE TABLE IF NOT EXISTS progress_records (
   UNIQUE(user_id, course_id)
 );
 
+-- 用户掌握度表（按 user + exercise 维度）
+CREATE TABLE IF NOT EXISTS mastery_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  exercise_id UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+  mastery INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, exercise_id)
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_lessons_course_id ON lessons(course_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_lesson_id ON exercises(lesson_id);
@@ -110,5 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_vocabulary_level ON vocabulary(level);
 CREATE INDEX IF NOT EXISTS idx_listening_level ON listening_materials(level);
 CREATE INDEX IF NOT EXISTS idx_attempts_user_id ON exercise_attempts(user_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_exercise_id ON exercise_attempts(exercise_id);
+CREATE INDEX IF NOT EXISTS idx_attempts_created_at ON exercise_attempts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_progress_user_id ON progress_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_progress_course_id ON progress_records(course_id);
+CREATE INDEX IF NOT EXISTS idx_mastery_user_exercise ON mastery_records(user_id, exercise_id);

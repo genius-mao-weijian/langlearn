@@ -3,15 +3,14 @@
  *
  * P0 使用无状态 JWT：
  * - access token：有效期 15 分钟，放在 Authorization 头中
- * - refresh token：有效期 7 天，存储在 Redis 中（key: refresh_token:{tokenId}）
+ * - refresh token：有效期 7 天，存储在 Redis（或内存回退）中（key: refresh_token:{tokenId}）
  *
  * 后续可扩展为 Redis 黑名单模式以支持主动登出。
  */
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { env } from '../../config/env.js';
-import { redis } from './redis.js';
-import type { UserId } from './types.js';
+import { redisSet, redisGet, redisDel } from './redis.js';
 
 // Access token 载荷
 export interface AccessTokenPayload {
@@ -43,7 +42,7 @@ export function signAccessToken(userId: string, email: string): string {
 }
 
 /**
- * 签发 refresh token 并存入 Redis
+ * 签发 refresh token 并存入 Redis（或内存回退）
  * @param userId 用户 ID
  * @returns refreshToken 字符串
  */
@@ -52,10 +51,9 @@ export async function signRefreshToken(userId: string): Promise<string> {
   const payload: RefreshTokenPayload = { userId, tokenId, type: 'refresh' };
   const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES_IN });
 
-  // 存入 Redis，7 天过期
+  // 存入 Redis（或内存），7 天过期
   const key = REFRESH_TOKEN_KEY_PREFIX + tokenId;
-  // 注意：redis 模块的 setEx 方法接受秒数
-  await redis.set(key, userId, { EX: 7 * 24 * 60 * 60 });
+  await redisSet(key, userId, { EX: 7 * 24 * 60 * 60 });
 
   return token;
 }
@@ -75,7 +73,7 @@ export function verifyAccessToken(token: string): AccessTokenPayload | null {
 }
 
 /**
- * 验证 refresh token 并检查 Redis 中是否存在
+ * 验证 refresh token 并检查 Redis（或内存回退）中是否存在
  * @returns 解码后的载荷，或 null（校验失败）
  */
 export async function verifyRefreshToken(token: string): Promise<RefreshTokenPayload | null> {
@@ -83,9 +81,9 @@ export async function verifyRefreshToken(token: string): Promise<RefreshTokenPay
     const decoded = jwt.verify(token, env.JWT_SECRET) as RefreshTokenPayload;
     if (decoded.type !== 'refresh') return null;
 
-    // 检查 Redis 中是否存在该 token
+    // 检查 Redis（或内存回退）中是否存在该 token
     const key = REFRESH_TOKEN_KEY_PREFIX + decoded.tokenId;
-    const stored = await redis.get(key);
+    const stored = await redisGet(key);
     if (!stored || stored !== decoded.userId) return null;
 
     return decoded;
@@ -101,7 +99,7 @@ export async function revokeRefreshToken(token: string): Promise<void> {
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET) as RefreshTokenPayload;
     const key = REFRESH_TOKEN_KEY_PREFIX + decoded.tokenId;
-    await redis.del(key);
+    await redisDel(key);
   } catch {
     // token 无效，无需撤销
   }
