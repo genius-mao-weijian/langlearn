@@ -1,5 +1,5 @@
-// ========== API Client ==========
-// 基于 fetch 的薄封装：自动附带 access token、自动 401 刷新、统一错误处理
+// ========== API Client（与后端 v2 DTO 对齐版） ==========
+// 基于 fetch 的薄封装：自动附带 access token、自动 401 刷新、自动解包 {code,message,data}
 
 import type {
   AuthTokens,
@@ -7,14 +7,16 @@ import type {
   Exercise,
   Lesson,
   ListeningMaterial,
-  ProgressOverview,
   SubmitResult,
   User,
   VocabularyItem,
+  DashboardDTO,
+  UserStats,
+  ProgressByLevelRow,
+  CoursesProgressRow,
+  AttemptRow,
 } from './types';
 
-// 开发环境下通过 Vite dev server /api 代理访问后端，
-// 生产环境通过 VITE_API_BASE 覆盖。
 const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE ?? '');
 
 export class ApiError extends Error {
@@ -31,11 +33,10 @@ export class ApiError extends Error {
 // ===== token 持久化 =====
 const ACCESS_KEY = 'langlearn:access';
 const REFRESH_KEY = 'langlearn:refresh';
-
-function getAccessToken(): string | null {
+export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_KEY);
 }
-function getRefreshToken(): string | null {
+export function getRefreshToken(): string | null {
   return localStorage.getItem(REFRESH_KEY);
 }
 export function setTokens(access: string, refresh: string): void {
@@ -64,9 +65,16 @@ async function refreshAccessToken(): Promise<string | null> {
         clearTokens();
         return null;
       }
-      const data = (await resp.json()) as { accessToken: string; refreshToken?: string };
-      setTokens(data.accessToken, data.refreshToken ?? refresh);
-      return data.accessToken;
+      const env = (await resp.json()) as {
+        code: number;
+        data: { accessToken: string; refreshToken?: string; user: User };
+      };
+      if (env.code !== 0) {
+        clearTokens();
+        return null;
+      }
+      setTokens(env.data.accessToken, env.data.refreshToken ?? refresh);
+      return env.data.accessToken;
     } catch {
       clearTokens();
       return null;
@@ -78,8 +86,6 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 // ===== 核心 fetch 封装 =====
-// 后端统一响应格式：{ code: 0, message: '成功', data: T }
-// 这里自动解包成 T；code != 0 时抛 ApiError(message=data.errors 或 message)。
 interface Envelope {
   code: number;
   message: string;
@@ -100,11 +106,9 @@ export async function apiRequest<T = unknown>(
   options: RequestInit & { auth?: boolean } = {},
 ): Promise<T> {
   const { auth = true, headers, ...rest } = options;
-
-  // 允许 path 是完整 URL
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
 
-  const run = async (withRefresh: boolean): Promise<Response> => {
+  const run = async (): Promise<Response> => {
     let token: string | null = null;
     if (auth) token = getAccessToken();
     const reqHeaders: Record<string, string> = {
@@ -112,37 +116,28 @@ export async function apiRequest<T = unknown>(
       ...(headers as Record<string, string> | undefined),
     };
     if (token) reqHeaders.Authorization = `Bearer ${token}`;
-    // 仅在未显式写 Content-Type 且有 body 时自动补 JSON
     if (rest.body && !reqHeaders['Content-Type']) {
       reqHeaders['Content-Type'] = 'application/json';
     }
     return fetch(url, { ...rest, headers: reqHeaders });
   };
 
-  let resp = await run(false);
+  let resp = await run();
 
   // 401 → 尝试 refresh 一次
   if (auth && resp.status === 401 && !options.signal?.aborted) {
     const newToken = await refreshAccessToken();
-    if (newToken) {
-      resp = await run(true);
-    }
+    if (newToken) resp = await run();
   }
 
   let data: unknown = null;
   const text = await resp.text();
   if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
-    }
+    try { data = JSON.parse(text); } catch { data = text; }
   }
 
-  // 自动解包 Envelope
   if (!resp.ok) {
     if (isEnvelope(data)) {
-      // 若 errors 对象存在，拼接为可读错误
       const errs =
         data.data && typeof data.data === 'object' && 'errors' in (data.data as object)
           ? (data.data as { errors?: Record<string, string> }).errors
@@ -171,7 +166,6 @@ export async function apiRequest<T = unknown>(
     }
     return data.data as T;
   }
-
   return data as T;
 }
 
@@ -181,36 +175,25 @@ export async function apiRequest<T = unknown>(
 export const authApi = {
   register(data: { email: string; password: string; nickname?: string }) {
     return apiRequest<AuthTokens>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      auth: false,
+      method: 'POST', body: JSON.stringify(data), auth: false,
     });
   },
   login(data: { email: string; password: string }) {
     return apiRequest<AuthTokens>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      auth: false,
+      method: 'POST', body: JSON.stringify(data), auth: false,
     });
   },
   me() {
     return apiRequest<{ user: User }>('/api/auth/me');
   },
   refresh(refreshToken: string) {
-    return apiRequest<{ accessToken: string; refreshToken?: string; user: User }>(
-      '/api/auth/refresh',
-      {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken }),
-        auth: false,
-      },
-    );
+    return apiRequest<AuthTokens>('/api/auth/refresh', {
+      method: 'POST', body: JSON.stringify({ refreshToken }), auth: false,
+    });
   },
   logout(refreshToken: string) {
     return apiRequest<{ success: true }>('/api/auth/logout', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken }),
-      auth: false,
+      method: 'POST', body: JSON.stringify({ refreshToken }), auth: false,
     });
   },
 };
@@ -222,19 +205,13 @@ export const courseApi = {
     if (params.language) q.set('language', params.language);
     if (params.level) q.set('level', params.level);
     const qs = q.toString();
-    return apiRequest<{ total: number; items: Course[] }>(
-      `/api/courses${qs ? `?${qs}` : ''}`,
-      { auth: false },
-    );
+    return apiRequest<Course[]>(`/api/courses${qs ? `?${qs}` : ''}`, { auth: false });
   },
   get(id: string) {
-    return apiRequest<{ course: Course }>(`/api/courses/${id}`, { auth: false });
+    return apiRequest<Course>(`/api/courses/${id}`, { auth: false });
   },
   getLessons(courseId: string) {
-    return apiRequest<{ total: number; items: Lesson[] }>(
-      `/api/courses/${courseId}/lessons`,
-      { auth: false },
-    );
+    return apiRequest<Lesson[]>(`/api/courses/${courseId}/lessons`, { auth: false });
   },
 };
 
@@ -246,7 +223,7 @@ export const learningApi = {
     if (params.limit != null) q.set('limit', String(params.limit));
     if (params.language) q.set('language', params.language);
     const qs = q.toString();
-    return apiRequest<{ total: number; items: VocabularyItem[] }>(
+    return apiRequest<VocabularyItem[]>(
       `/api/learning/vocabulary${qs ? `?${qs}` : ''}`,
       { auth: false },
     );
@@ -256,44 +233,39 @@ export const learningApi = {
     if (params.level) q.set('level', params.level);
     if (params.language) q.set('language', params.language);
     const qs = q.toString();
-    return apiRequest<{ total: number; items: ListeningMaterial[] }>(
+    return apiRequest<ListeningMaterial[]>(
       `/api/learning/listening${qs ? `?${qs}` : ''}`,
       { auth: false },
     );
   },
   getExercise(id: string) {
-    return apiRequest<{ exercise: Exercise }>(`/api/learning/${id}`);
+    return apiRequest<Exercise>(`/api/learning/${id}`);
   },
   submitExercise(id: string, answer: string) {
     return apiRequest<SubmitResult>(`/api/learning/${id}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ answer }),
+      method: 'POST', body: JSON.stringify({ answer }),
     });
   },
 };
 
 // -- Progress --
 export const progressApi = {
+  dashboard() {
+    return apiRequest<DashboardDTO>('/api/progress/dashboard');
+  },
+  stats() {
+    return apiRequest<UserStats>('/api/progress/stats');
+  },
+  byLevel() {
+    return apiRequest<ProgressByLevelRow[]>('/api/progress/byLevel');
+  },
   overview() {
-    return apiRequest<ProgressOverview>('/api/progress');
+    return apiRequest<CoursesProgressRow[]>('/api/progress');
   },
   course(courseId: string) {
-    return apiRequest<{
-      courseId: string;
-      lessons: Array<{ lessonId: string; progress: number }>;
-      overallProgress: number;
-    }>(`/api/progress/course/${courseId}`);
+    return apiRequest<CoursesProgressRow>(`/api/progress/detail/${courseId}`);
   },
-  recent(limit = 20) {
-    return apiRequest<{
-      total: number;
-      items: Array<{
-        exerciseId: string;
-        score: number;
-        correct: boolean;
-        xpEarned: number;
-        submittedAt: string;
-      }>;
-    }>(`/api/progress/recent?limit=${limit}`);
+  recent(limit = 10) {
+    return apiRequest<AttemptRow[]>(`/api/progress/recent?limit=${limit}`);
   },
 };

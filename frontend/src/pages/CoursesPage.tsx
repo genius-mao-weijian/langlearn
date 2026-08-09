@@ -1,4 +1,4 @@
-// ========== 课程列表页 ==========
+// ========== 课程列表页（API v2 数组版） ==========
 import { useEffect, useState } from 'react';
 import { courseApi } from '../lib/api';
 import type { Course } from '../lib/types';
@@ -21,7 +21,6 @@ const levels = [
 
 export default function CoursesPage() {
   const [list, setList] = useState<Course[]>([]);
-  const [total, setTotal] = useState(0);
   const [lang, setLang] = useState('all');
   const [level, setLevel] = useState('all');
   const [loading, setLoading] = useState(false);
@@ -36,8 +35,7 @@ export default function CoursesPage() {
       })
       .then((res) => {
         if (cancelled) return;
-        setList(res.items);
-        setTotal(res.total);
+        setList(res);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
@@ -49,7 +47,7 @@ export default function CoursesPage() {
         <div>
           <h1 style={{ margin: 0 }}>全部课程</h1>
           <p className="muted" style={{ marginTop: 4 }}>
-            共 <strong>{total}</strong> 门课程。选择适合你的目标语言和能力等级。
+            共 <strong>{list.length}</strong> 门课程。选择适合你的目标语言和能力等级。
           </p>
         </div>
       </div>

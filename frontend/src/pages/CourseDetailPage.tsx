@@ -1,4 +1,4 @@
-// ========== 课程详情页 ==========
+// ========== 课程详情页（API v2：course/getLessons 返回裸对象/数组） ==========
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { courseApi } from '../lib/api';
@@ -26,8 +26,8 @@ export default function CourseDetailPage() {
     Promise.all([courseApi.get(id), courseApi.getLessons(id)])
       .then(([c, l]) => {
         if (cancelled) return;
-        setCourse(c.course);
-        setLessons(l.items);
+        setCourse(c);
+        setLessons(l);
       })
       .catch((e) => !cancelled && setErr(e?.message ?? '加载失败'))
       .finally(() => !cancelled && setLoading(false));
@@ -92,39 +92,37 @@ export default function CourseDetailPage() {
       </div>
 
       <div style={{ height: 20 }} />
-      <div className="grid grid--cols-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        <div className="card" style={{ gridColumn: '1 / -1' }}>
-          <div className="card__title">
-            <h3 style={{ margin: 0 }}>课程大纲（{lessons.length} 课时）</h3>
-          </div>
-          <div className="lesson-list">
-            {lessons.map((l) => (
-              <div key={l.id} className="lesson-row">
-                <div className="lesson-row__index">{String(l.sequence).padStart(2, '0')}</div>
-                <div className="lesson-row__main">
-                  <div className="lesson-row__title">{l.title}</div>
-                  <div className="lesson-row__desc">{l.description}</div>
-                </div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  练习 {l.exerciseIds.length} 个
-                </div>
-                <Link
-                  to={l.exerciseIds[0] ? `/exercise/${l.exerciseIds[0]}` : '/learn'}
-                  className="btn btn--sm btn--ghost"
-                  onClick={(e) => !l.exerciseIds[0] && e.preventDefault()}
-                  style={!l.exerciseIds[0] ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
-                >
-                  开始练习
-                </Link>
+      <div className="card">
+        <div className="card__title">
+          <h3 style={{ margin: 0 }}>课程大纲（{lessons.length} 课时）</h3>
+        </div>
+        <div className="lesson-list">
+          {lessons.map((l) => (
+            <div key={l.id} className="lesson-row">
+              <div className="lesson-row__index">{String(l.sequence).padStart(2, '0')}</div>
+              <div className="lesson-row__main">
+                <div className="lesson-row__title">{l.title}</div>
+                <div className="lesson-row__desc">{l.description}</div>
               </div>
-            ))}
-            {lessons.length === 0 && (
-              <div className="empty">
-                <div className="empty__icon">📝</div>
-                课程大纲维护中，稍后再来
+              <div className="muted" style={{ fontSize: 12 }}>
+                练习 {l.exerciseIds.length} 个
               </div>
-            )}
-          </div>
+              <Link
+                to={l.exerciseIds[0] ? `/exercise/${l.exerciseIds[0]}` : '/learn'}
+                className="btn btn--sm btn--ghost"
+                onClick={(e) => !l.exerciseIds[0] && e.preventDefault()}
+                style={!l.exerciseIds[0] ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
+              >
+                开始练习
+              </Link>
+            </div>
+          ))}
+          {lessons.length === 0 && (
+            <div className="empty">
+              <div className="empty__icon">📝</div>
+              课程大纲维护中，稍后再来
+            </div>
+          )}
         </div>
       </div>
     </div>

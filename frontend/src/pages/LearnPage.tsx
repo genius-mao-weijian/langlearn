@@ -27,20 +27,20 @@ export default function LearnPage() {
   const [loading, setLoading] = useState(true);
   const [level, setLevel] = useState('A1');
 
-  // 预加载：课程列表
+  // 预加载：课程列表 + 单词 + 听力
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     Promise.all([
       courseApi.list({}),
-      learningApi.vocabulary({ level, limit: 8, language: 'en' }),
-      learningApi.listening({ level, language: 'en' }),
+      learningApi.vocabulary({ level, limit: 8 }),
+      learningApi.listening({ level }),
     ])
       .then(([c, v, l]) => {
         if (cancelled) return;
-        setCourses(c.items);
-        setVocab(v.items);
-        setListen(l.items);
+        setCourses(c);
+        setVocab(v);
+        setListen(l);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
@@ -64,19 +64,18 @@ export default function LearnPage() {
     <div className="container">
       <h1 style={{ margin: 0 }}>学习中心</h1>
       <p className="muted" style={{ marginTop: 4, marginBottom: 20 }}>
-        选择一个模块，开启沉浸式练习。坚持 10 分钟 > 一次 100 分钟。
+        选择一个模块，开启沉浸式练习。坚持 10 分钟 胜于 一次 100 分钟。
       </p>
 
       {/* 快速入口卡片 */}
       <section className="grid grid--cols-4" style={{ marginBottom: 24 }}>
         {quickLinks.map((t) => {
           const disabled = !courses.length && (t.type === 'grammar' || t.type === 'speaking');
-          // grammar / speaking 目前尚无种子练习，点击跳转到课程列表
           const href =
             t.type === 'vocabulary'
               ? defaultFirstExercise
               : t.type === 'listening'
-                ? '#' // 锚点，下面有 tab 切换
+                ? '#'
                 : defaultFirstExercise;
           const onClick = (e: React.MouseEvent) => {
             if (t.type === 'listening') {
@@ -114,9 +113,6 @@ export default function LearnPage() {
             </h3>
             <Link to={`/courses/${courseId}`} className="muted" style={{ fontSize: 13 }}>查看大纲 →</Link>
           </div>
-          <p className="muted" style={{ fontSize: 14 }}>
-            从课程详情页选择「开始练习」可跳转到具体题目。
-          </p>
         </section>
       )}
 
@@ -183,9 +179,14 @@ export default function LearnPage() {
               <div style={{ marginTop: 10, fontSize: 15, fontWeight: 600, color: '#4338ca' }}>
                 {v.translation}
               </div>
-              {v.example && (
+              {v.exampleSentence && (
                 <div style={{ marginTop: 10, fontSize: 13, color: '#475569', fontStyle: 'italic' }}>
-                  「{v.example}」
+                  「{v.exampleSentence}」
+                </div>
+              )}
+              {v.exampleTranslation && (
+                <div style={{ marginTop: 4, fontSize: 13, color: '#64748b' }}>
+                  —— {v.exampleTranslation}
                 </div>
               )}
             </div>
@@ -198,18 +199,28 @@ export default function LearnPage() {
             <div key={l.id} className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <LevelBadge level={l.level} />
-                <span className="badge badge--success">听力</span>
+                <span className="badge badge--success">听力 · {l.durationSeconds}s</span>
               </div>
               <h3 style={{ margin: '10px 0 8px' }}>{l.title}</h3>
+              {l.description && (
+                <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>{l.description}</div>
+              )}
               <details style={{ fontSize: 13, color: '#334155' }}>
-                <summary style={{ cursor: 'pointer', color: '#6366f1' }}>查看原文</summary>
-                <p style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 10, lineHeight: 1.7 }}>
-                  {l.transcript}
-                </p>
+                <summary style={{ cursor: 'pointer', color: '#6366f1' }}>查看原文 / 译文</summary>
+                {l.transcript && (
+                  <p style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 10, lineHeight: 1.7 }}>
+                    {l.transcript}
+                  </p>
+                )}
+                {l.translation && (
+                  <p style={{ marginTop: 4, padding: 10, background: '#eef2ff', borderRadius: 10, lineHeight: 1.7, color: '#3730a3' }}>
+                    {l.translation}
+                  </p>
+                )}
               </details>
               {!l.audioUrl && (
                 <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                  🔈 音频文件待上传（用户待办 #1）
+                  🔈 音频文件待上传
                 </div>
               )}
             </div>

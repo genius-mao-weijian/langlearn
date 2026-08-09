@@ -1,4 +1,4 @@
-// ========== 练习页：支持选择题提交、展示判分、XP 奖励 ==========
+// ========== 练习页（v2 DTO）：直接返回 Exercise/SubmitResult 裸对象，无 level/language/updatedMastery/explanation ==========
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { learningApi } from '../lib/api';
@@ -33,7 +33,7 @@ export default function ExercisePage() {
     setResult(null);
     try {
       const r = await learningApi.getExercise(id);
-      setExercise(r.exercise);
+      setExercise(r);
     } catch (e: any) {
       setErr(e?.message ?? '加载失败');
     } finally {
@@ -89,6 +89,10 @@ export default function ExercisePage() {
     return undefined;
   };
 
+  const masteryBefore = 50; // P0 简化估算（后端暂不返回 mastery 当前值）
+  const delta = result?.masteryDelta ?? 0;
+  const masteryAfter = Math.max(0, Math.min(100, masteryBefore + delta));
+
   return (
     <div className="container container--narrow">
       <Link to="/learn" className="muted" style={{ fontSize: 13 }}>← 返回学习中心</Link>
@@ -96,7 +100,7 @@ export default function ExercisePage() {
 
       <div className="question-card">
         <div className="question-card__type">
-          {typeLabel[exercise.type] ?? exercise.type} · {exercise.level}
+          {typeLabel[exercise.type] ?? exercise.type}
         </div>
         <h1 className="question-card__prompt">{exercise.prompt}</h1>
         {exercise.instructions && (
@@ -151,14 +155,12 @@ export default function ExercisePage() {
                 <div>正确答案：<strong>{result.correctAnswer}</strong></div>
               )}
               <div>
-                掌握度：{result.updatedMastery - result.masteryDelta >= 0 ? '+' : ''}
-                {result.masteryDelta} → <strong>{result.updatedMastery}%</strong>
+                掌握度变化：
+                <strong style={{ color: delta >= 0 ? '#065f46' : '#991b1b' }}>
+                  {delta >= 0 ? '+' : ''}{delta}
+                </strong>
+                （当前约 {masteryAfter}%）
               </div>
-              {result.explanation && (
-                <div style={{ color: result.correct ? '#065f46' : '#991b1b' }}>
-                  💡 {result.explanation}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -171,14 +173,16 @@ export default function ExercisePage() {
                 disabled={!selected || submitting}
                 onClick={onSubmit}
               >
-                {submitting ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> 提交中…</> : '提交答案'}
+                {submitting ? (
+                  <>
+                    <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+                    提交中…
+                  </>
+                ) : (
+                  '提交答案'
+                )}
               </button>
-              <button
-                className="btn btn--ghost"
-                onClick={() => nav('/learn')}
-              >
-                返回
-              </button>
+              <button className="btn btn--ghost" onClick={() => nav('/learn')}>返回</button>
             </>
           ) : (
             <>

@@ -1,4 +1,4 @@
-// ========== 首页 ==========
+// ========== 首页（API v2 数组版） ==========
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { courseApi } from '../lib/api';
@@ -14,7 +14,6 @@ const languages = [
 
 export default function HomePage() {
   const [list, setList] = useState<Course[]>([]);
-  const [total, setTotal] = useState(0);
   const [lang, setLang] = useState('all');
   const [loading, setLoading] = useState(false);
 
@@ -25,18 +24,14 @@ export default function HomePage() {
       .list({ language: lang === 'all' ? undefined : lang })
       .then((res) => {
         if (cancelled) return;
-        setList(res.items);
-        setTotal(res.total);
+        setList(res);
       })
       .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [lang]);
 
   return (
     <div className="container">
-      {/* Hero */}
       <section className="hero">
         <div>
           <span className="hero__eyebrow">沉浸式语言学习 · 免费体验</span>
@@ -48,13 +43,13 @@ export default function HomePage() {
             分级课程体系 · 互动式学习模块 · 学习进度追踪 · 个性化学习路径 · 社区交流与成就激励 —— 让坚持学习成为习惯。
           </p>
           <div className="hero__actions">
-            <Link to="/register" className="btn btn--primary">🚀 免费开始学习</Link>
+            <Link to="/register" className="btn btn--primary">免费开始学习</Link>
             <Link to="/courses" className="btn btn--ghost">浏览全部课程</Link>
           </div>
           <div className="hero__stats">
             <div className="stat">
               <div className="stat__label">课程</div>
-              <div className="stat__value">{total}</div>
+              <div className="stat__value">{list.length}</div>
             </div>
             <div className="stat">
               <div className="stat__label">语言</div>
@@ -73,7 +68,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 推荐课程 */}
       <section style={{ marginTop: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <h2 style={{ margin: 0 }}>推荐课程</h2>

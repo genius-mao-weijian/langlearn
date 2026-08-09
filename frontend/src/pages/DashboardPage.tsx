@@ -1,8 +1,8 @@
-// ========== 学习进度仪表盘 ==========
+// ========== 学习进度仪表盘（API v2 DashboardDTO 单接口版） ==========
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { progressApi } from '../lib/api';
-import type { ProgressOverview } from '../lib/types';
+import type { DashboardDTO } from '../lib/types';
 
 function formatRelativeTime(iso: string | null | undefined): string {
   if (!iso) return '从未';
@@ -16,37 +16,25 @@ function formatRelativeTime(iso: string | null | undefined): string {
   return `${d} 天前`;
 }
 
-interface RecentItem {
-  exerciseId: string;
-  score: number;
-  correct: boolean;
-  xpEarned: number;
-  submittedAt: string;
-}
-
 export default function DashboardPage() {
   const [params] = useSearchParams();
   const welcome = params.get('welcome') === '1';
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [overview, setOverview] = useState<ProgressOverview | null>(null);
-  const [recent, setRecent] = useState<RecentItem[]>([]);
+  const [dash, setDash] = useState<DashboardDTO | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([progressApi.overview(), progressApi.recent(20)])
-      .then(([o, r]) => {
-        if (cancelled) return;
-        setOverview(o);
-        setRecent(r.items);
-      })
+    progressApi
+      .dashboard()
+      .then((d) => { if (!cancelled) setDash(d); })
       .catch((e) => !cancelled && setErr(e?.message ?? '加载失败'))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, []);
 
   if (loading) return <div className="container center"><span className="spinner" /></div>;
-  if (err || !overview) {
+  if (err || !dash) {
     return (
       <div className="container">
         <div className="card" style={{ textAlign: 'center' }}>
@@ -58,11 +46,17 @@ export default function DashboardPage() {
     );
   }
 
+  const { user, stats, byLevel, recentAttempts, coursesProgress } = dash;
+  const totalExercises = byLevel.reduce((s, l) => s + l.totalExercises, 0);
+  const completedExercises = byLevel.reduce((s, l) => s + l.completedExercises, 0);
+  const completionRate = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
+  const lastStudiedAt = recentAttempts[0]?.attemptedAt ?? null;
+
   return (
     <div className="container">
       {welcome && (
         <div className="alert alert--success" style={{ marginBottom: 16 }}>
-          🎉 欢迎加入 LangLearn！从一节 5 分钟的单词课开始，养成每天学习的习惯吧。
+          🎉 欢迎加入 LangLearn，{user.nickname}！从一节 5 分钟的单词课开始，养成每天学习的习惯吧。
         </div>
       )}
 
@@ -72,11 +66,13 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <h2 style={{ margin: 0 }}>
-                今天也要继续学习 🌱
+                {user.nickname}，今天也要继续学习 🌱
               </h2>
               <p className="muted" style={{ marginTop: 4, marginBottom: 0 }}>
-                上次活跃：{formatRelativeTime(overview.lastActiveAt)}
-                {overview.streakDays > 0 && <> · 当前连续打卡 <strong style={{ color: '#f59e0b' }}>{overview.streakDays}</strong> 天 🔥</>}
+                上次活跃：{formatRelativeTime(lastStudiedAt)}
+                {stats.streakDays > 0 && (
+                  <> · 当前连续打卡 <strong style={{ color: '#f59e0b' }}>{stats.streakDays}</strong> 天 🔥</>
+                )}
               </p>
             </div>
             <div>
@@ -85,81 +81,90 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 统计 4 卡 */}
+        {/* 完成率 */}
         <div className="card dash--rate">
           <div className="dash-stat__label">完成率</div>
-          <div className="dash-stat__value">{Math.round(overview.completionRate)}%</div>
+          <div className="dash-stat__value">{completionRate}%</div>
           <div style={{ marginTop: 12 }}>
             <div className="progress-bar">
-              <div className="progress-bar__fill"
-                style={{ width: `${Math.min(100, overview.completionRate)}%` }} />
+              <div className="progress-bar__fill" style={{ width: `${Math.min(100, completionRate)}%` }} />
             </div>
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              {overview.completedExercises} / {overview.totalExercises} 题
+              {completedExercises} / {totalExercises} 题
             </div>
           </div>
         </div>
 
+        {/* XP */}
         <div className="card dash--xp">
           <div className="dash-stat__label">累计 XP</div>
-          <div className="dash-stat__value" style={{ color: '#4f46e5' }}>{overview.totalXp}</div>
+          <div className="dash-stat__value" style={{ color: '#4f46e5' }}>{stats.totalXp}</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
             继续完成练习，解锁成就徽章
           </div>
         </div>
 
+        {/* 连击 */}
         <div className="card dash--streak">
           <div className="dash-stat__label">连续学习</div>
-          <div className="dash-stat__value" style={{ color: '#f59e0b' }}>{overview.streakDays} <span style={{ fontSize: 16, fontWeight: 600 }}>天</span></div>
+          <div className="dash-stat__value" style={{ color: '#f59e0b' }}>
+            {stats.streakDays} <span style={{ fontSize: 16, fontWeight: 600 }}>天</span>
+          </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            {overview.streakDays >= 7 ? '🏅 已连续一周！' : '明天再来打卡 +1'}
+            {stats.streakDays >= 7 ? '🏅 已连续一周！' : '明天再来打卡 +1'}
           </div>
         </div>
 
+        {/* 总学习时长 */}
         <div className="card dash--time">
           <div className="dash-stat__label">总学习时长</div>
-          <div className="dash-stat__value" style={{ color: '#10b981' }}>{overview.totalMinutes}</div>
+          <div className="dash-stat__value" style={{ color: '#10b981' }}>{stats.studyMinutes}</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            ≈ {Math.round(overview.totalMinutes / 60 * 10) / 10} 小时
+            ≈ {Math.round((stats.studyMinutes / 60) * 10) / 10} 小时
           </div>
         </div>
 
-        {/* 按等级进度 */}
+        {/* 按等级进度 + 课程进度 */}
         <div className="card dash--chart">
           <div className="card__title">
             <h3 style={{ margin: 0 }}>按等级完成度</h3>
           </div>
           <div className="level-progress">
-            {overview.byLevel.length === 0 ? (
+            {byLevel.length === 0 ? (
               <div className="muted" style={{ fontSize: 13 }}>暂无练习记录，完成第一次练习后显示</div>
-            ) : overview.byLevel.map((l) => (
+            ) : byLevel.map((l) => (
               <div key={l.level} className="level-progress__row">
                 <span className="badge">{l.level}</span>
                 <div className="progress-bar">
                   <div
-                    className={`progress-bar__fill${l.rate >= 80 ? ' progress-bar__fill--success' : l.rate <= 20 ? ' progress-bar__fill--warning' : ''}`}
-                    style={{ width: `${Math.min(100, l.rate)}%` }}
+                    className={`progress-bar__fill${l.completionRate >= 80 ? ' progress-bar__fill--success' : l.completionRate <= 20 ? ' progress-bar__fill--warning' : ''}`}
+                    style={{ width: `${Math.min(100, l.completionRate)}%` }}
                   />
                 </div>
-                <span style={{ textAlign: 'right', fontWeight: 600 }}>{Math.round(l.rate)}%</span>
+                <span style={{ textAlign: 'right', fontWeight: 600 }}>{l.completionRate}%</span>
               </div>
             ))}
           </div>
 
           <div style={{ marginTop: 20 }}>
             <h3 style={{ margin: '0 0 10px' }}>我的课程进度</h3>
-            {overview.courses.length === 0 ? (
-              <div className="muted" style={{ fontSize: 13 }}>还没有学习任何课程</div>
+            {coursesProgress.length === 0 ? (
+              <div className="muted" style={{ fontSize: 13 }}>
+                还没有学习任何课程，<Link to="/courses">去挑一门课吧</Link>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {overview.courses.map((c) => (
+                {coursesProgress.map((c) => (
                   <div key={c.courseId}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
                       <span style={{ fontWeight: 600 }}>{c.courseTitle}</span>
-                      <span className="muted">{Math.round(c.progress)}%</span>
+                      <span className="muted">{c.completionRate}%</span>
                     </div>
                     <div className="progress-bar">
-                      <div className="progress-bar__fill" style={{ width: `${Math.min(100, c.progress)}%` }} />
+                      <div className="progress-bar__fill" style={{ width: `${Math.min(100, c.completionRate)}%` }} />
+                    </div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      答对 {c.correctExercises}/{c.totalExercises} 题 · 最近：{formatRelativeTime(c.lastStudiedAt)}
                     </div>
                   </div>
                 ))}
@@ -172,23 +177,23 @@ export default function DashboardPage() {
         <div className="card dash--list">
           <div className="card__title">
             <h3 style={{ margin: 0 }}>最近练习记录</h3>
-            <span className="muted" style={{ fontSize: 12 }}>最近 20 条</span>
+            <span className="muted" style={{ fontSize: 12 }}>最近 {recentAttempts.length} 条</span>
           </div>
-          {recent.length === 0 ? (
+          {recentAttempts.length === 0 ? (
             <div className="empty">
               <div className="empty__icon">🏁</div>
               暂无练习记录，<Link to="/learn">去做第一题</Link>
             </div>
           ) : (
             <ul className="activity-list">
-              {recent.map((r, i) => (
-                <li key={`${r.exerciseId}-${i}`} className="activity-item">
+              {recentAttempts.map((r) => (
+                <li key={r.id} className="activity-item">
                   <div>
                     <span className={`activity-item__score ${r.correct ? 'activity-item__score--ok' : 'activity-item__score--bad'}`}>
                       {r.correct ? '✅' : '❌'} {r.score} 分
                     </span>
                     <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
-                      {formatRelativeTime(r.submittedAt)}
+                      {formatRelativeTime(r.attemptedAt)}
                     </span>
                   </div>
                   <div>
