@@ -135,3 +135,15 @@ export interface DashboardDTO {
   recentAttempts: AttemptRow[];
   coursesProgress: CoursesProgressRow[];
 }
+
+// ===== Achievement =====
+export interface Achievement {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  unlocked: boolean;
+  unlockedAt: string | null;
+}

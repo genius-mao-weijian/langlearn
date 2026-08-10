@@ -17,6 +17,7 @@ import identityRoutes from './modules/identity/routes.js';
 import courseRoutes from './modules/course/routes.js';
 import learningRoutes from './modules/learning/routes.js';
 import progressRoutes from './modules/progress/routes.js';
+import achievementRoutes from './modules/achievement/routes.js';
 
 // 创建 Express 应用实例
 const app = express();
@@ -51,10 +52,12 @@ app.use('/api/auth', identityRoutes);      // 身份认证模块：注册 / 登�
 app.use('/api/courses', courseRoutes);     // 分级课程模块：课程 / 课时
 app.use('/api/learning', learningRoutes);  // 互动学习模块：练习 / 单词 / 听力
 app.use('/api/progress', progressRoutes);  // 进度追踪模块：学习进度
+app.use('/api/achievements', achievementRoutes); // 成就激励模块：勋章
 
-// 注册事件订阅：progress 模块订阅 EXERCISE_COMPLETED 事件
+// 注册事件订阅：progress 与 achievement 模块订阅 EXERCISE_COMPLETED 事件
 // import 该模块会触发 routes.ts 中的 eventBus.on() 调用
 import './modules/progress/routes.js';
+import './modules/achievement/routes.js';
 
 // ===== 启动 HTTP 服务 =====
 app.listen(env.PORT, () => {

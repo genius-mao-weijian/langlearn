@@ -9,6 +9,7 @@ import CourseDetailPage from './pages/CourseDetailPage';
 import LearnPage from './pages/LearnPage';
 import ExercisePage from './pages/ExercisePage';
 import DashboardPage from './pages/DashboardPage';
+import AchievementsPage from './pages/AchievementsPage';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/learn" element={<LearnPage />} />
         <Route path="/exercise/:id" element={<ProtectedRoute><ExercisePage /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/achievements" element={<ProtectedRoute><AchievementsPage /></ProtectedRoute>} />
         <Route path="*" element={
           <div className="container center" style={{ minHeight: 400 }}>
             <div className="empty">

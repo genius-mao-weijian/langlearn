@@ -7,6 +7,7 @@ const navItems: Array<{ to: string; label: string }> = [
   { to: '/', label: '首页' },
   { to: '/courses', label: '课程' },
   { to: '/learn', label: '学习' },
+  { to: '/achievements', label: '成就' },
 ];
 
 function initial(name: string | undefined | null): string {

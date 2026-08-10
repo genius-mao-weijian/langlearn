@@ -168,3 +168,15 @@ export interface ExerciseCompletedPayload {
   masteryDelta?: number;
   totalOptions?: number;
 }
+
+// ===== 模块间 DTO：Achievement =====
+export interface AchievementDTO {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  unlocked: boolean;
+  unlockedAt: string | null;
+}

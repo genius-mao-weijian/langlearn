@@ -1,8 +1,8 @@
 // ========== 学习进度仪表盘（API v2 DashboardDTO 单接口版） ==========
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { progressApi } from '../lib/api';
-import type { DashboardDTO } from '../lib/types';
+import { progressApi, achievementApi } from '../lib/api';
+import type { DashboardDTO, Achievement } from '../lib/types';
 
 function formatRelativeTime(iso: string | null | undefined): string {
   if (!iso) return '从未';
@@ -22,12 +22,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [dash, setDash] = useState<DashboardDTO | null>(null);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    progressApi
-      .dashboard()
-      .then((d) => { if (!cancelled) setDash(d); })
+    Promise.all([
+      progressApi.dashboard(),
+      achievementApi.list().catch(() => [] as Achievement[]),
+    ])
+      .then(([d, ach]) => {
+        if (cancelled) return;
+        setDash(d);
+        setAchievements(ach);
+      })
       .catch((e) => !cancelled && setErr(e?.message ?? '加载失败'))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };

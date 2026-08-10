@@ -12,6 +12,7 @@ import {
   verifyRefreshToken,
   revokeRefreshToken,
 } from '../shared/jwt.js';
+import { eventBus, EventType } from '../shared/eventBus.js';
 import type { UserDTO, AuthResponseDTO } from '../shared/types.js';
 
 interface UserRow {
@@ -77,6 +78,9 @@ export async function registerUser(
   const user = mapToUserDTO(row);
   const accessToken = signAccessToken(row.id, row.email);
   const refreshToken = await signRefreshToken(row.id);
+
+  // 发布用户注册事件（achievement 模块消费以授予首登勋章）
+  eventBus.emit(EventType.USER_REGISTERED, { userId: row.id });
 
   return {
     user,

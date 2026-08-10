@@ -454,6 +454,50 @@ const listeningMaterials = [
   },
 ];
 
+// ===== 勋章定义数据（P1：5 种）=====
+const achievements = [
+  {
+    code: 'first_login',
+    name: '初次相遇',
+    description: '完成注册并首次登录平台',
+    icon: '🎉',
+    category: 'general',
+    sort_order: 1,
+  },
+  {
+    code: 'streak_7',
+    name: '一周打卡王',
+    description: '连续 7 天完成至少 1 道练习',
+    icon: '🔥',
+    category: 'streak',
+    sort_order: 2,
+  },
+  {
+    code: 'exercises_100',
+    name: '百题斩',
+    description: '累计完成 100 道练习题',
+    icon: '💯',
+    category: 'exercise',
+    sort_order: 3,
+  },
+  {
+    code: 'perfect_streak_10',
+    name: '十全十美',
+    description: '连续 10 道练习全部答对',
+    icon: '🎯',
+    category: 'exercise',
+    sort_order: 4,
+  },
+  {
+    code: 'xp_500',
+    name: '经验达人',
+    description: '累计获得 500 XP 经验值',
+    icon: '⚡',
+    category: 'xp',
+    sort_order: 5,
+  },
+];
+
 /**
  * 种子数据主流程
  */
@@ -553,16 +597,33 @@ async function seed() {
       );
     }
 
+    // 7. 插入勋章定义（upsert，不清空已有解锁记录）
+    console.log('[seed] 插入勋章定义数据...');
+    for (const ach of achievements) {
+      await client.query(
+        `INSERT INTO achievement_definitions (code, name, description, icon, category, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (code) DO UPDATE SET
+           name = EXCLUDED.name,
+           description = EXCLUDED.description,
+           icon = EXCLUDED.icon,
+           category = EXCLUDED.category,
+           sort_order = EXCLUDED.sort_order`,
+        [ach.code, ach.name, ach.description, ach.icon, ach.category, ach.sort_order]
+      );
+    }
+
     await client.query('COMMIT');
     console.log('[seed] 事务已提交，数据插入完成\n');
 
-    // 7. 打印各表数据量
+    // 8. 打印各表数据量
     const tables = [
       'courses',
       'lessons',
       'exercises',
       'vocabulary',
       'listening_materials',
+      'achievement_definitions',
     ];
     console.log('===== 各表数据量 =====');
     for (const table of tables) {

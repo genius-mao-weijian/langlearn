@@ -15,6 +15,7 @@ import type {
   ProgressByLevelRow,
   CoursesProgressRow,
   AttemptRow,
+  Achievement,
 } from './types';
 
 const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE ?? '');
@@ -267,5 +268,15 @@ export const progressApi = {
   },
   recent(limit = 10) {
     return apiRequest<AttemptRow[]>(`/api/progress/recent?limit=${limit}`);
+  },
+};
+
+// -- Achievement --
+export const achievementApi = {
+  list() {
+    return apiRequest<Achievement[]>('/api/achievements');
+  },
+  count() {
+    return apiRequest<{ count: number; total: number }>('/api/achievements/count');
   },
 };
